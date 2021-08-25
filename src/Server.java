@@ -98,7 +98,7 @@ public class Server extends Thread
         clnt_sock_chan.configureBlocking(false);
         clnt_sock_chan.register(selector, SelectionKey.OP_READ);
 
-        tx_buf = charset.encode("[I]:S:Unknown:Enter your ID: ");
+        tx_buf = charset.encode("[I]/S/Unknown/Enter your ID: ");
         clnt_sock_chan.write(tx_buf);
 
         tx_buf.clear();
@@ -114,7 +114,7 @@ public class Server extends Thread
             return;
         }
 
-        Message msg = new Message(new String(rx_buf.array()));
+        Message msg = new Message(rx_buf);
         rx_buf.flip();
 
         if (msg.type() == 'I')
@@ -122,7 +122,8 @@ public class Server extends Thread
             if (clnt_list.containsKey(msg.TX()))
             {
                 System.out.println(String.format("[Error] Duplicated ID: %s!", msg.TX()));
-                forward_msg(key, String.format("[E]:S:%s:ID %s is already connected!", msg.TX(), msg.TX()));
+                forward_msg(key, String.format("[E]/S/%s/E001", msg.TX()));
+                forward_msg(key, String.format("[I]/S/Unknown/Enter your ID: "));
             }
             else
             {
@@ -132,17 +133,43 @@ public class Server extends Thread
         }
         else if (msg.type() == 'C')
         {
-            for (String rx_node : msg.RXs())
+            if(msg.RXs()[0].equals("all"))
             {
-                if (! clnt_list.containsKey(rx_node))
-                {
-                    System.out.println(String.format("[Error] User name %s doesn't exist!", rx_node));
-                    forward_msg(key, String.format("[E]:S:%s:User name %s doesn't exist!", msg.TX(), rx_node));
-                    continue;
-                }
+                Iterator<String> all_nodes = clnt_list.keySet().iterator();
 
-                System.out.println(String.format("[Chat] User %s send message to %s", msg.TX(), rx_node));
-                forward_msg(clnt_list.get(rx_node), String.format("[C]:%s:%s:%s", msg.TX(), rx_node, msg.content()));
+                while (all_nodes.hasNext())
+                {
+                    String rx_node = all_nodes.next();
+
+                    if (msg.TX().equals(rx_node))
+                    {
+                        continue;
+                    }
+
+                    System.out.println(String.format("[Chat] User %s send message to %s", msg.TX(), rx_node));
+                    forward_msg(clnt_list.get(rx_node), String.format("[C]/%s/%s/%s", msg.TX(), rx_node, msg.content()));
+                }
+            }
+            else
+            {
+                for (String rx_node : msg.RXs())
+                {
+                    // Self-Talking?
+                    if (msg.TX().equals(rx_node))
+                    {
+                        continue;
+                    }
+    
+                    if (! clnt_list.containsKey(rx_node))
+                    {
+                        System.out.println(String.format("[Error] User name %s doesn't exist!", rx_node));
+                        forward_msg(key, String.format("[E]/S/%s/E002/%s", msg.TX(), rx_node));
+                        continue;
+                    }
+    
+                    System.out.println(String.format("[Chat] User %s send message to %s", msg.TX(), rx_node));
+                    forward_msg(clnt_list.get(rx_node), String.format("[C]/%s/%s/%s", msg.TX(), rx_node, msg.content()));
+                }
             }
         }
         else // msg.type() = 'E'

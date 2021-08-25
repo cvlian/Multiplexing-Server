@@ -3,6 +3,8 @@
  * 
  */
 
+import java.nio.ByteBuffer;
+
 public class Message
 {
     private char msg_type;
@@ -10,14 +12,29 @@ public class Message
     private String[] rx_nodes;
     private String msg_content;
 
-    public Message(String raw_msg)
+    public Message(ByteBuffer buf)
     {
-        String[] msg_fields = (raw_msg).split(":", 4);
+        buf.limit(buf.position());
+        buf.flip();
 
-        msg_type = msg_fields[0].charAt(1);
-        tx_node = msg_fields[1];
-        rx_nodes = msg_fields[2].split(",");
-        msg_content = msg_fields[3];
+        byte[] b = new byte[buf.limit()];
+        buf.get(b);
+
+        String raw_msg = new String(b);
+
+        String[] msg_fields = (raw_msg).split("/", 4);
+
+        if (msg_fields.length == 4)
+        {
+            msg_type = msg_fields[0].charAt(1);
+            tx_node = msg_fields[1];
+            rx_nodes = msg_fields[2].split(",");
+            msg_content = msg_fields[3];
+        }
+        else
+        {
+            msg_content = msg_fields[0];
+        }
     }
 
     public char type()

@@ -4,6 +4,7 @@
  */
 
 import java.io.*;
+import java.util.regex.Pattern;
 
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
@@ -16,8 +17,8 @@ import java.nio.channels.WritableByteChannel;
 public class Client
 {
     private SocketChannel sock_chan;
-    private WritableByteChannel wb_chan;
-    private ByteBuffer rx_buf, tx_buf;
+    private static WritableByteChannel wb_chan;
+    private static ByteBuffer rx_buf, tx_buf;
     private static boolean is_connected;
     private static Charset charset;
     private static String cid;
@@ -61,7 +62,7 @@ public class Client
     }
 
     // Write chat logs/server messages standard out
-    public void print_msg(String s) throws IOException
+    public static void print_msg(String s) throws IOException
     {
         tx_buf = charset.encode(s);
         wb_chan.write(tx_buf);
@@ -79,7 +80,7 @@ public class Client
             return;
         }
 
-        Message msg = new Message(new String(rx_buf.array()));
+        Message msg = new Message(rx_buf);
 
         if (msg.type() == 'I') // connection establishment
         {
@@ -87,11 +88,27 @@ public class Client
         }
         else if (msg.type() == 'C') // chat
         {
-            print_msg(msg.TX() + ":" + msg.content());
+            print_msg("from "+msg.TX() + ":" + msg.content());
         }
         else // error
         {
+            /* Error code list
+             *
+             * E001 : Duplicated ID
+             * E002 [user name] : [user name] doesn't exist
+             */
 
+            String[] err_msgs = msg.content().split("/");
+
+            if(err_msgs[0].equals("E001"))
+            {
+                print_msg("[Error]: Duplicated ID, try another ID\n");
+                is_connected = false;
+            }
+            else if(err_msgs[0].equals("E002"))
+            {
+                print_msg(String.format("[Error]: User \"%s\" doesn't exist\n", err_msgs[1]));
+            }
         }
 
         rx_buf.clear();
@@ -134,24 +151,41 @@ public class Client
                         continue;
                     }
 
-                    rx_buf.limit(rx_buf.position() - 1);
-                    rx_buf.flip();
-                    
-                    String raw_msg = new String(rx_buf.array());
+                    Message msg = new Message(rx_buf);
+
+                    rx_buf.clear();
 
                     if(! is_connected)
                     {
-                        cid = new String(raw_msg);
-                        is_connected = true;
-                        send_msg(String.format("[I]:%s:S:my ID", raw_msg));
+                        cid = new String(msg.content().replace("\n", ""));
+
+                        if (! Pattern.matches("^[a-zA-Z0-9]*$", cid))
+                        {
+                            print_msg("[Error]: You can use only alphabetic or numeric characters\n");
+                            print_msg("Enter your ID: ");
+                        }
+                        else if(cid.equals("all"))
+                        {
+                            print_msg("[Error]: ID cannot be \"all\"\n");
+                            print_msg("Enter your ID: ");
+                        }
+                        else
+                        {
+                            is_connected = true;
+                            send_msg(String.format("[I]/%s/S/my ID", cid));
+                        }
                     }
                     else
                     {
-                        String[] msgs = raw_msg.split("-");
-                        send_msg(String.format("[C]:%s:%s:%s\n", cid, msgs[0], msgs[1]));
-                    }
+                        if (! Pattern.matches("^to [a-zA-Z0-9,]+:.+\n$", msg.content()))
+                        {
+                            print_msg("[Error]: Wrong message format, follow \"to [user name1, user name2, .../all]: [message]\"\n");
+                            continue;
+                        }
 
-                    rx_buf.clear();
+                        String[] msgs = msg.content().substring(3).split(":");
+                        send_msg(String.format("[C]/%s/%s/%s", cid, msgs[0], msgs[1]));
+                    }
                 }
             }
             catch (IOException e)
