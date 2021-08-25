@@ -134,15 +134,10 @@ public class Client
                         continue;
                     }
 
-                    // Remove new line '\n'
                     rx_buf.limit(rx_buf.position() - 1);
-                    //rx_buf.position(0);
                     rx_buf.flip();
-
-                    // Reconstruct the byte stream 
-                    byte[] b = new byte[rx_buf.limit()];
-                    rx_buf.get(b);
-                    String raw_msg = new String(b);
+                    
+                    String raw_msg = new String(rx_buf.array());
 
                     if(! is_connected)
                     {
