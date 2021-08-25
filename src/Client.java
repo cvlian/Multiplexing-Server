@@ -18,9 +18,9 @@ public class Client
     private SocketChannel sock_chan;
     private WritableByteChannel wb_chan;
     private ByteBuffer rx_buf, tx_buf;
-    private boolean is_connected;
-    private Charset charset;
-    private String cid;
+    private static boolean is_connected;
+    private static Charset charset;
+    private static String cid;
 
     private static int DEF_PORT = 9876;
     private static int BUF_SIZE = 256;
@@ -106,7 +106,7 @@ public class Client
         }
     }
 
-    class SystemIn implements Runnable
+    private static class SystemIn implements Runnable
     {
         SocketChannel sock_chan;
         ByteBuffer rx_buf, tx_buf;
@@ -136,9 +136,10 @@ public class Client
 
                     // Remove new line '\n'
                     rx_buf.limit(rx_buf.position() - 1);
-                    rx_buf.position(0);
+                    //rx_buf.position(0);
+                    rx_buf.flip();
 
-                    // Reconstruct the byte stream
+                    // Reconstruct the byte stream 
                     byte[] b = new byte[rx_buf.limit()];
                     rx_buf.get(b);
                     String raw_msg = new String(b);

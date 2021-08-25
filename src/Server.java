@@ -111,11 +111,11 @@ public class Server extends Thread
 
         if (byte_cnt <= 0)
         {
-            clnt_sock_chan.close();
             return;
         }
 
         Message msg = new Message(new String(rx_buf.array()));
+        rx_buf.flip();
 
         if (msg.type() == 'I')
         {
