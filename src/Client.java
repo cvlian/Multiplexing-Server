@@ -4,50 +4,37 @@
  */
 
 import java.io.*;
-import java.util.*;
 
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.channels.SocketChannel;
+import java.nio.channels.Channels;
+import java.nio.channels.ReadableByteChannel;
+import java.nio.channels.WritableByteChannel;
 
-public class Client extends Thread
+public class Client
 {
     private SocketChannel sock_chan;
+    private WritableByteChannel wb_chan;
     private ByteBuffer rx_buf, tx_buf;
+    private boolean is_connected;
     private Charset charset;
     private String cid;
-    private boolean is_connected;
 
     private static int DEF_PORT = 9876;
     private static int BUF_SIZE = 256;
-    private static Scanner sc = new Scanner(System.in);
 
     public Client()
     {
-        is_connected = false;
         charset = Charset.forName("UTF-8");
         rx_buf = ByteBuffer.allocate(BUF_SIZE);
     }
 
-    @Override
-    public void run()
-    {
-        try
-        {
-            init();
-            close();
-        }
-        catch (IOException e)
-        {
-            e.printStackTrace();;
-        }
-    }
-
-    public static void main(String[] args)
+    public static void main(String[] args) throws IOException
     {
         Client clnt = new Client();
-        clnt.run();
+        clnt.init();
     }
 
     public void init() throws IOException
@@ -56,55 +43,53 @@ public class Client extends Thread
         sock_chan = SocketChannel.open();
         sock_chan.configureBlocking(true);
 
+        wb_chan = Channels.newChannel(System.out);
+
         // Connect the channel's socket
-        System.out.println("Request for a connection");
+        print_msg("Request for a connection\n");
         sock_chan.connect(new InetSocketAddress("localhost", DEF_PORT));
-        System.out.println("Connection success");
+        print_msg("Connection success\n");
+
+        // Create a thread responsible for handling both standatrd input & message transmission to the server
+        Thread systemIn = new Thread(new SystemIn(sock_chan));
+        systemIn.start();
 
         while (true)
         {
             get_msg();
-
-            if (is_connected)
-            {
-                send_msg();
-            }
         }
     }
 
-    public void register_ID() throws IOException
+    // Write chat logs/server messages standard out
+    public void print_msg(String s) throws IOException
     {
-        cid = sc.nextLine();
-        tx_buf = charset.encode(String.format("[I]:%s:S:my ID", cid));
-        sock_chan.write(tx_buf);
-
+        tx_buf = charset.encode(s);
+        wb_chan.write(tx_buf);
         tx_buf.clear();
+    }
 
-        is_connected = true;
-    }  
-
+    // Receive a message from the server
     public void get_msg() throws IOException
     {
         int byte_cnt = sock_chan.read(rx_buf);
 
+        // Nothing to print out...
         if (byte_cnt <= 0)
         {
             return;
         }
 
-        // Receive a msg from the server
         Message msg = new Message(new String(rx_buf.array()));
 
-        if (msg.type() == 'I')
+        if (msg.type() == 'I') // connection establishment
         {
-            System.out.print(msg.content());
-            register_ID();
+            print_msg(msg.content());
         }
-        else if (msg.type() == 'C')
+        else if (msg.type() == 'C') // chat
         {
-            System.out.print(msg.TX() + ":" + msg.content());
+            print_msg(msg.TX() + ":" + msg.content());
         }
-        else
+        else // error
         {
 
         }
@@ -112,21 +97,78 @@ public class Client extends Thread
         rx_buf.clear();
     }
 
-    public void send_msg() throws IOException
-    {
-        String[] msgs = sc.nextLine().split("-");
-
-        tx_buf = charset.encode(String.format("[C]:%s:%s:%s", cid, msgs[0], msgs[1]));
-        sock_chan.write(tx_buf);
-
-        tx_buf.clear();
-    }
-
+    // Close the activated channel
     private void close() throws IOException
     {
         if(sock_chan.isOpen())
         {
             sock_chan.close();
+        }
+    }
+
+    class SystemIn implements Runnable
+    {
+        SocketChannel sock_chan;
+        ByteBuffer rx_buf, tx_buf;
+    
+        SystemIn(SocketChannel chan)
+        {
+            is_connected = false;
+            sock_chan = chan;
+        }
+    
+        @Override
+        public void run()
+        {
+            ReadableByteChannel rb_chan = Channels.newChannel(System.in);
+            rx_buf = ByteBuffer.allocate(BUF_SIZE);
+    
+            try
+            {
+                while(true)
+                {
+                    int byte_cnt = rb_chan.read(rx_buf);
+
+                    if (byte_cnt <= 0)
+                    {
+                        continue;
+                    }
+
+                    // Remove new line '\n'
+                    rx_buf.limit(rx_buf.position() - 1);
+                    rx_buf.position(0);
+
+                    // Reconstruct the byte stream
+                    byte[] b = new byte[rx_buf.limit()];
+                    rx_buf.get(b);
+                    String raw_msg = new String(b);
+
+                    if(! is_connected)
+                    {
+                        cid = new String(raw_msg);
+                        is_connected = true;
+                        send_msg(String.format("[I]:%s:S:my ID", raw_msg));
+                    }
+                    else
+                    {
+                        String[] msgs = raw_msg.split("-");
+                        send_msg(String.format("[C]:%s:%s:%s\n", cid, msgs[0], msgs[1]));
+                    }
+
+                    rx_buf.clear();
+                }
+            }
+            catch (IOException e)
+            {
+    
+            }
+        }
+
+        void send_msg(String s) throws IOException
+        {
+            tx_buf = charset.encode(s);
+            sock_chan.write(tx_buf);
+            tx_buf.clear();
         }
     }
 }

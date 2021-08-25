@@ -141,7 +141,7 @@ public class Server extends Thread
                     continue;
                 }
 
-                System.out.println(String.format("[Chat] User %s send message to %s", rx_node, msg.TX()));
+                System.out.println(String.format("[Chat] User %s send message to %s", msg.TX(), rx_node));
                 forward_msg(clnt_list.get(rx_node), String.format("[C]:%s:%s:%s", msg.TX(), rx_node, msg.content()));
             }
         }
