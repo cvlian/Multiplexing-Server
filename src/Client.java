@@ -1,6 +1,6 @@
 /*  Client.java
  *
- * 
+ *  A real-time chatting application built on multiplexing client-server model
  */
 
 import java.io.*;
@@ -19,12 +19,12 @@ public class Client
     private SocketChannel sock_chan;
     private static WritableByteChannel wb_chan;
     private static ByteBuffer rx_buf, tx_buf;
-    private static boolean is_connected;
+    private static boolean is_connected; // True, when the client succeed in initiating a session
     private static Charset charset;
-    private static String cid;
+    private static String cid; // Client ID
 
-    private static int DEF_PORT = 9876;
-    private static int BUF_SIZE = 256;
+    private static int DEF_PORT = 9876; // Default port number to be connected on
+    private static int BUF_SIZE = 256; // ByteBuffer's capacity, in bytes
 
     public Client()
     {
@@ -40,7 +40,7 @@ public class Client
 
     public void init() throws IOException
     {
-        // Open a socket channel, and then adjust its blocking mode
+        // Open a socket channel
         sock_chan = SocketChannel.open();
         sock_chan.configureBlocking(true);
 
@@ -55,13 +55,14 @@ public class Client
         Thread systemIn = new Thread(new SystemIn(sock_chan));
         systemIn.start();
 
+        // See if any message has been received
         while (true)
         {
             get_msg();
         }
     }
 
-    // Write chat logs/server messages standard out
+    // Write chat logs & server messages on standard out
     public static void print_msg(String s) throws IOException
     {
         tx_buf = charset.encode(s);
@@ -80,6 +81,7 @@ public class Client
             return;
         }
 
+        // Read from receiving buffer and decode to a Message object (see Message.java)
         Message msg = new Message(rx_buf);
 
         if (msg.type() == 'I') // connection establishment
@@ -123,6 +125,10 @@ public class Client
         }
     }
 
+    /* A thread that takes charge of handling keyboard input.
+     * This thread waits for input from the keyboard to come in,
+     * and then puts it in a transmission buffer (tx_buf).
+     */
     private static class SystemIn implements Runnable
     {
         SocketChannel sock_chan;
@@ -146,30 +152,32 @@ public class Client
                 {
                     int byte_cnt = rb_chan.read(rx_buf);
 
+                    // Nothing to read in...
                     if (byte_cnt <= 0)
                     {
                         continue;
                     }
 
+                    // Read from keyboard input and decode to a Message object (see Message.java)
                     Message msg = new Message(rx_buf);
-
                     rx_buf.clear();
 
+                    // Create a new user ID
                     if(! is_connected)
                     {
                         cid = new String(msg.content().replace("\n", ""));
 
-                        if (! Pattern.matches("^[a-zA-Z0-9]*$", cid))
+                        if (! Pattern.matches("^[a-zA-Z0-9]*$", cid)) // Make sure user entered ID in the correct format
                         {
                             print_msg("[Error]: You can use only alphabetic or numeric characters\n");
                             print_msg("Enter your ID: ");
                         }
-                        else if(cid.equals("all"))
+                        else if(cid.equals("all")) // Prevent any user to create ID 'all'
                         {
                             print_msg("[Error]: ID cannot be \"all\"\n");
                             print_msg("Enter your ID: ");
                         }
-                        else
+                        else // Send a registration request for the new ID
                         {
                             is_connected = true;
                             send_msg(String.format("[I]/%s/S/my ID", cid));
@@ -177,6 +185,15 @@ public class Client
                     }
                     else
                     {
+                        /* Chatting message needs to conform to a specific format:
+                         *
+                         *      to [user name]: [message]
+                         * 
+                         * Type 'all' in [user name] when you want to broadcast the message to all members
+                         * It's also possible to write multiple user IDs by seperating them with a comma
+                         * 
+                         *      ex. to kim,lee,park: hello?
+                         */ 
                         if (! Pattern.matches("^to [a-zA-Z0-9,]+:.+\n$", msg.content()))
                         {
                             print_msg("[Error]: Wrong message format, follow \"to [user name1, user name2, .../all]: [message]\"\n");
@@ -190,10 +207,11 @@ public class Client
             }
             catch (IOException e)
             {
-    
+                e.printStackTrace();
             }
         }
 
+        // Write standard input data into the channel
         void send_msg(String s) throws IOException
         {
             tx_buf = charset.encode(s);

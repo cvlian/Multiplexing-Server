@@ -1,6 +1,6 @@
 /*  Server.java
  *
- * 
+ *  A real-time chatting application built on multiplexing client-server model
  */
 
 import java.io.IOException;
@@ -20,10 +20,10 @@ public class Server extends Thread
     private ByteBuffer rx_buf, tx_buf;
     private ServerSocketChannel svr_sock_chan;
     private Charset charset;
-    private HashMap<String, SelectionKey> clnt_list;
+    private HashMap<String, SelectionKey> clnt_list; // Hashmap that conatins all Client ID/channel key pairs
 
-    private static int DEF_PORT = 9876;
-    private static int BUF_SIZE = 256;
+    private static int DEF_PORT = 9876; // Default port number to be connected on
+    private static int BUF_SIZE = 256; // ByteBuffer's capacity, in bytes
 
     public Server()
     {
@@ -57,7 +57,7 @@ public class Server extends Thread
     {
         selector = Selector.open();
 
-        // Open a server socket channel, and then adjust its blocking mode
+        // Open a server socket channel in non-blocking mode
         svr_sock_chan = ServerSocketChannel.open();
         svr_sock_chan.configureBlocking(false);
 
@@ -76,11 +76,13 @@ public class Server extends Thread
             {
                 SelectionKey key = iter.next();
 
+                // New connection has been made
                 if (key.isAcceptable()) 
                 {
                     register_client();
                 }
 
+                // See if any message has been received
                 if (key.isReadable()) 
                 {
                     get_msg(key);
@@ -91,6 +93,7 @@ public class Server extends Thread
         }
     }
 
+    // Add a socket client to the list of registered channels
     private void register_client() throws IOException
     {
         // Accept a connection made to this channel's socket
@@ -104,21 +107,25 @@ public class Server extends Thread
         tx_buf.clear();
     }
 
+    // Receive a message from a client
     private void get_msg(SelectionKey key) throws IOException
     {
         SocketChannel clnt_sock_chan = (SocketChannel)key.channel();
         int byte_cnt = clnt_sock_chan.read(rx_buf);
 
+        // Nothing to read in...
         if (byte_cnt <= 0)
         {
             return;
         }
 
+        // Read from receiving buffer and decode to a Message object (see Message.java)
         Message msg = new Message(rx_buf);
         rx_buf.flip();
 
-        if (msg.type() == 'I')
+        if (msg.type() == 'I') // connection establishment
         {
+            // Prevent duplicated user ID
             if (clnt_list.containsKey(msg.TX()))
             {
                 System.out.println(String.format("[Error] Duplicated ID: %s!", msg.TX()));
@@ -131,9 +138,9 @@ public class Server extends Thread
                 System.out.println(String.format("[Init] New ID: %s!", msg.TX()));
             }
         }
-        else if (msg.type() == 'C')
+        else if (msg.type() == 'C') // chat
         {
-            if(msg.RXs()[0].equals("all"))
+            if(msg.RXs()[0].equals("all")) // forward message to all clients
             {
                 Iterator<String> all_nodes = clnt_list.keySet().iterator();
 
@@ -141,6 +148,7 @@ public class Server extends Thread
                 {
                     String rx_node = all_nodes.next();
 
+                    // Self-Talking?
                     if (msg.TX().equals(rx_node))
                     {
                         continue;
@@ -160,6 +168,7 @@ public class Server extends Thread
                         continue;
                     }
     
+                    // Alert that the given receiver ID does not exist in client list
                     if (! clnt_list.containsKey(rx_node))
                     {
                         System.out.println(String.format("[Error] User name %s doesn't exist!", rx_node));
@@ -180,17 +189,18 @@ public class Server extends Thread
         rx_buf.clear();
     }
 
+    // Deliver a message to its recipients
     private void forward_msg(SelectionKey key, String msg) throws IOException
     {
         SocketChannel clnt_sock_chan = (SocketChannel)key.channel();
 
-        // Reply to the client's msg
         tx_buf = charset.encode(msg);
         clnt_sock_chan.write(tx_buf);
 
         tx_buf.clear();
     }
 
+    // Close the opened channel
     private void close() throws IOException
     {
         if(svr_sock_chan.isOpen())

@@ -1,19 +1,20 @@
 /*  Message.java
  *
- * 
+ *  A real-time chatting application built on multiplexing client-server model
  */
 
 import java.nio.ByteBuffer;
 
 public class Message
 {
-    private char msg_type;
-    private String tx_node;
-    private String[] rx_nodes;
-    private String msg_content;
+    private char msg_type;      // I : initialization, C: chat, E: error
+    private String tx_node;     // Transmitting host
+    private String[] rx_nodes;  // Receiving hosts
+    private String msg_content; // raw message
 
     public Message(ByteBuffer buf)
     {
+        // Flip the buffer to start reading
         buf.limit(buf.position());
         buf.flip();
 
@@ -22,6 +23,10 @@ public class Message
 
         String raw_msg = new String(b);
 
+        /* message format: [msg type]/[tx_node]/[rx_nodes]/msg_content
+         *      ex. [C]/kim/lee,park/hello?
+         * 
+         */
         String[] msg_fields = (raw_msg).split("/", 4);
 
         if (msg_fields.length == 4)
