@@ -4,6 +4,10 @@ A real-time chatting application built on multiplexing client-server model
 
 ## Usage
 
+### prerequisites
+
+* JDK version 8
+
 ### Execute program
 
     $ git clone https://github.com/cvlian/Multiplexing-Server
